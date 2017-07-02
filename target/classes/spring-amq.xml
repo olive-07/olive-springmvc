@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>  
+<beans xmlns="http://www.springframework.org/schema/beans"  
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"  
+    xmlns:context="http://www.springframework.org/schema/context"  
+    xmlns:mvc="http://www.springframework.org/schema/mvc"  
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd  
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.1.xsd  
+        http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.1.xsd">  
+        
+   	<!-- 与 WEB 平台交互的JMS配置 -->
+   	<!-- 真正可以产生Connection的ConnectionFactory，由对应的 JMS服务厂商提供 -->  
+    <bean id="activeMQConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">  
+        <property name="brokerURL"><value>${amq.address}</value></property>
+        <property name="useAsyncSend">
+            <value>true</value>
+        </property>
+    </bean>  
+    <!-- Spring用于管理真正的ConnectionFactory的ConnectionFactory 使用的是singleConnectionFactory 我们暂时不使用 -->  
+    <bean id="singleConnectionFactory" class="org.springframework.jms.connection.SingleConnectionFactory">  
+        <property name="targetConnectionFactory" ref="activeMQConnectionFactory"/>  
+    </bean>  
+    <bean id="cachingConnectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory">  
+        <property name="targetConnectionFactory" ref="activeMQConnectionFactory"/>  
+    </bean>
+    
+     <!-- ActiveMQ为我们提供了一个PooledConnectionFactory，往里面注入一个ActiveMQConnectionFactory可以用来将Connection,  
+         Session和MessageProducer池化，这样可以大大的减少我们的资源消耗。  
+         问题:使用poolConnectionFactory时候,用JMSTemplate同步循环接收消息,因为JMSTemplate会自动在接收消息后关闭连接,  
+         所以循环到第二次的时候会报错,这个问题待解决  
+         问题:使用poolConnectionFactory时候,用监听来接收消息,会有部分消息残留在队列里面,问题待解决  
+         结论:最好还是先别用连接池了 但是我们先测试使用连接池方式 -->
+	<bean id="platformConnectionPool" class="org.apache.activemq.pool.PooledConnectionFactory" destroy-method="stop">
+       <property name="connectionMQFactory" ref="activeMQConnectionFactory" /> 
+       <property name="maxConnections" value="100"></property> 
+	</bean>
+    <!-- 发送队列 -->
+    <bean id="platformDestinationAM" class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg index="0">
+            <value>${amq.pqueue}</value>
+        </constructor-arg>
+    </bean>
+    
+    <!-- 接收队列 -->
+    <bean id="platformDestinationMA" class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg index="0">
+            <value>${amq.cqueue}</value>
+        </constructor-arg>
+    </bean>
+    
+    <!-- 消息转换 -->
+    <bean id="platformMessageConverter" class="com.info.amq.PlatformObjectMessageConverter"/>
+     
+    <!-- 配置JMS模版 -->
+    <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <property name="connectionFactory" ref="platformConnectionPool" />
+       	<!--  <property name="messageConverter" ref="platformMessageConverter" /> -->
+        <!-- 非pub/sub模型（发布/订阅），即队列模式 -->  
+        <property name="pubSubDomain" value="false" /> 
+        <!-- deliveryMode, priority, timeToLive 的开关要生效，必须配置为true，默认false-->
+        <property name="explicitQosEnabled" value="true"/>
+        <!-- 内部的consumer在receive方法中阻塞的时间。默认为1秒。 -->
+        <!-- <property name="receiveTimeout" value="10000" /> -->
+        <!-- 发送模式
+             DeliveryMode.NON_PERSISTENT=1:非持久 ;
+             DeliveryMode.PERSISTENT=2:持久
+        -->
+        <property name="deliveryMode" value="1"/>
+        <!-- 消息应答方式
+             Session.AUTO_ACKNOWLEDGE  消息自动签收
+             Session.CLIENT_ACKNOWLEDGE  客户端调用acknowledge方法手动签收
+             Session.DUPS_OK_ACKNOWLEDGE 不必必须签收，消息可能会重复发送
+        -->
+        <!--  <property name="sessionAcknowledgeModeName" value="AUTO_ACKNOWLEDGE"/>  -->
+    </bean>
+     
+    <!-- 生产者配置 -->
+    <bean id="platformQueueProducer" class="com.info.amq.PlatformMessageProducer">
+        <property name="destination" ref="platformDestinationAM"/>
+        <property name="jmsTemplate">  
+            <list>  
+                <ref bean="jmsTemplate" /> 
+            </list>  
+        </property>
+    </bean>
+     
+ 	<!-- 消费者配置   -->
+     <bean id="platformQueueConsumer" class="com.info.amq.PlatformMessageConsumer" >
+     	<property name="upLayer" ref="platformQueueProducer"/>
+     </bean>
+        
+     <bean id="platformQueueListener" class="org.springframework.jms.listener.adapter.MessageListenerAdapter">
+         <constructor-arg ref="platformQueueConsumer"/>
+         <property name="defaultListenerMethod" value="receive"/>
+        <!--  <property name="messageConverter" ref="platformMessageConverter"/> -->
+        
+     </bean>
+     
+     <bean id="platformQueueListenerContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+         <property name="" ref="platformConnectionPool"/>
+         <property name="destination" ref="platformDestinationMA" />
+         <property name="messageListener" ref="platformQueueListener" />
+         <!-- “concurrentConsumers”与“maxConcurrentConsumers”两个参数的简写方式，格式为“5-10”，则表示concurrentConsumers为5，maxConcurrentConsumers为10。 -->
+         <property name="concurrency" value="10-15"></property>
+         <!-- 开启订阅模式 -->
+         <property name="pubSubDomain" value="false"/>
+         <!-- 是否为“耐久性”订阅者。在pubSubDomain为true时有效。默认为false -->
+         <!-- <property name="subscriptionDurable" value="true"/> -->
+         <!--  当消息消费时，底层connection异常而无法继续，listener需要等待恢复的时间间隔。默认为5000ms。 -->
+         <!-- <property name="recoveryInterval" value="5"></property> -->
+         <!-- 对于Topic订阅者而言 这里是设置接收客户端的ID， 在持久化时，但这个客户端不在线时，消息就存在数据库里，直到被这个ID的客户端消费掉-->
+         <!-- <property name="clientId" value="consumerClient"/> -->
+         <!-- 消息应答方式
+             Session.AUTO_ACKNOWLEDGE  消息自动签收
+             Session.CLIENT_ACKNOWLEDGE  客户端调用acknowledge方法手动签收
+             Session.DUPS_OK_ACKNOWLEDGE 不必必须签收，消息可能会重复发送
+         -->
+         <!--  <property name="sessionAcknowledgeMode" value="2"/> -->
+     </bean>
+     
+</beans> 
