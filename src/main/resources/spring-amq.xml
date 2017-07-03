@@ -6,8 +6,7 @@
     xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd  
         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.1.xsd  
         http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-4.1.xsd">  
-        
-   	<!-- 与 WEB 平台交互的JMS配置 -->
+    <!-- 与 WEB 平台交互的JMS配置 -->
    	<!-- 真正可以产生Connection的ConnectionFactory，由对应的 JMS服务厂商提供 -->  
     <bean id="activeMQConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">  
         <property name="brokerURL"><value>${amq.address}</value></property>
@@ -22,18 +21,20 @@
     <bean id="cachingConnectionFactory" class="org.springframework.jms.connection.CachingConnectionFactory">  
         <property name="targetConnectionFactory" ref="activeMQConnectionFactory"/>  
     </bean>
-    
-     <!-- ActiveMQ为我们提供了一个PooledConnectionFactory，往里面注入一个ActiveMQConnectionFactory可以用来将Connection,  
+    <!-- ActiveMQ为我们提供了一个PooledConnectionFactory，往里面注入一个ActiveMQConnectionFactory可以用来将Connection,  
          Session和MessageProducer池化，这样可以大大的减少我们的资源消耗。  
-         问题:使用poolConnectionFactory时候,用JMSTemplate同步循环接收消息,因为JMSTemplate会自动在接收消息后关闭连接,  
-         所以循环到第二次的时候会报错,这个问题待解决  
-         问题:使用poolConnectionFactory时候,用监听来接收消息,会有部分消息残留在队列里面,问题待解决  
-         结论:最好还是先别用连接池了 但是我们先测试使用连接池方式 -->
-	<bean id="platformConnectionPool" class="org.apache.activemq.pool.PooledConnectionFactory" destroy-method="stop">
-       <property name="connectionMQFactory" ref="activeMQConnectionFactory" /> 
+	         问题:使用poolConnectionFactory时候,用JMSTemplate同步循环接收消息,因为JMSTemplate会自动在接收消息后关闭连接,  
+	         所以循环到第二次的时候会报错,这个问题待解决  
+	         问题:使用poolConnectionFactory时候,用监听来接收消息,会有部分消息残留在队列里面,问题待解决  
+	         结论:最好还是先别用连接池了 但是我们先测试使用连接池方式 -->
+	<bean id="platformConnectionPool" 
+		class="org.apache.activemq.pool.PooledConnectionFactory" 
+		destroy-method="stop">
+       <property name="connectionFactory" ref="activeMQConnectionFactory" /> 
        <property name="maxConnections" value="100"></property> 
 	</bean>
-    <!-- 发送队列 -->
+     
+     <!-- 发送队列 -->
     <bean id="platformDestinationAM" class="org.apache.activemq.command.ActiveMQQueue">
         <constructor-arg index="0">
             <value>${amq.pqueue}</value>
@@ -53,7 +54,7 @@
     <!-- 配置JMS模版 -->
     <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
         <property name="connectionFactory" ref="platformConnectionPool" />
-       	<!--  <property name="messageConverter" ref="platformMessageConverter" /> -->
+        <property name="messageConverter" ref="platformMessageConverter" />
         <!-- 非pub/sub模型（发布/订阅），即队列模式 -->  
         <property name="pubSubDomain" value="false" /> 
         <!-- deliveryMode, priority, timeToLive 的开关要生效，必须配置为true，默认false-->
@@ -92,11 +93,10 @@
          <constructor-arg ref="platformQueueConsumer"/>
          <property name="defaultListenerMethod" value="receive"/>
         <!--  <property name="messageConverter" ref="platformMessageConverter"/> -->
-        
      </bean>
      
      <bean id="platformQueueListenerContainer" class="org.springframework.jms.listener.DefaultMessageListenerContainer">
-         <property name="" ref="platformConnectionPool"/>
+         <property name="connectionFactory" ref="platformConnectionPool"/>
          <property name="destination" ref="platformDestinationMA" />
          <property name="messageListener" ref="platformQueueListener" />
          <!-- “concurrentConsumers”与“maxConcurrentConsumers”两个参数的简写方式，格式为“5-10”，则表示concurrentConsumers为5，maxConcurrentConsumers为10。 -->

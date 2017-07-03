@@ -15,6 +15,7 @@ import org.springframework.jms.support.converter.MessageConverter;
 
 /**
  * 消息转换类
+ *  Created by olive on 2017/1/5.
  */
 public class PlatformObjectMessageConverter implements MessageConverter {
 
