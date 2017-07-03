@@ -9,6 +9,7 @@ import javax.jms.ObjectMessage;
 
 /**
  * 从 WEB 平台收到消息
+ * Created by olive on 2017/1/5.
  */
 public class PlatformMessageConsumer {
 

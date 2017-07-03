@@ -6,16 +6,16 @@ import com.info.back.domain.User;
 
 @Repository
 public interface IUserDao {
-	
-    int deleteByPrimaryKey(Integer id);
 
-    int insert(User record);
+	int deleteByPrimaryKey(Integer id);
 
-    int insertSelective(User record);
+	int insert(User record);
 
-    User selectByPrimaryKey(Integer id);
+	int insertSelective(User record);
 
-    int updateByPrimaryKeySelective(User record);
+	User selectByPrimaryKey(Integer id);
 
-    int updateByPrimaryKey(User record);
+	int updateByPrimaryKeySelective(User record);
+
+	int updateByPrimaryKey(User record);
 }

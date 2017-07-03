@@ -13,6 +13,7 @@ import org.springframework.jms.core.JmsTemplate;
 
 /**
  * 发送消息到 WEB 平台
+ *  Created by olive on 2017/1/5.
  */
 public class PlatformMessageProducer extends AbstractMessageProducer {
 

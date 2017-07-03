@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import com.info.utils.JMSsendMessageUtil;
 
 /**
- * Created by Administrator on 2017/1/5.
+ * Created by olive on 2017/1/5.
  */
 @Controller
 @RequestMapping("/Message")
